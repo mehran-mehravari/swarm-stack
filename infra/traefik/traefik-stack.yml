@@ -1,0 +1,43 @@
+version: "3.7"
+services:
+  traefik:
+    image: local-registry-address/traefik:1.7
+    command: --web \
+      --docker \
+      --docker.swarmmode \
+      --docker.domain=example.com \
+      --docker.watch \
+      --logLevel=DEBUG
+    networks:
+      - gateway
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      #- /dev/null:/traefik.toml
+    configs:
+      - source: traefik-0.0.1
+        target: /etc/traefik/traefik.toml  
+    deploy:
+      mode: global
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+      placement:
+        constraints: [node.role == manager]
+      labels:
+        - "traefik.enable=true"
+        - "traefik.port=8080"
+        - "traefik.docker.network=gateway"
+        - "traefik.frontend.rule=Host:traefik.example.com"
+
+networks:
+  gateway:
+    driver: overlay
+    external: true
+
+configs:
+  traefik-0.0.1:
+    file: ./traefik.toml

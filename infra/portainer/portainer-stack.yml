@@ -1,0 +1,64 @@
+version: "3.7"
+services:
+  portainer:
+    image: registry.local/portainer/portainer:1.20.1
+    command: -H tcp://tasks.agent:9001 --tlsskipverify
+    #command: --admin-password 'mypassword'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainerdata:/data
+    networks:
+      - internal
+      - gateway
+    deploy:
+      #mode: global
+      #replicas: 1
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+      placement:
+        constraints: [node.role == manager]
+      labels:
+        traefik.enable: "true"
+        traefik.port: 9000
+        traefik.docker.network: gateway
+        traefik.frontend.rule: Host:example.com
+
+  agent:
+    image: registry.local/portainer/agent:1.2.1
+    environment:
+      AGENT_CLUSTER_ADDR: tasks.agent
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - target: 9001
+        published: 9001
+        protocol: tcp
+        mode: host
+    networks:
+      - internal
+    deploy:
+      mode: global
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+
+networks:
+  internal:
+  gateway:
+    external: true
+    driver: overlay
+
+
+volumes:
+   portainerdata:
+     #name: 'portainerdata-{{ .Task.Slot }}'
+     driver: rexray
+     driver_opts:
+       size: 10
+
+#secrets:
+#  portainer_pass:
+#    external: true

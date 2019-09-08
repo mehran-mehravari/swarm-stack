@@ -1,0 +1,43 @@
+debug = false
+
+defaultEntryPoints = ["http"]
+
+[entryPoints]
+  [entryPoints.http]
+  address = ":80"
+  [entryPoints.traefik]
+  address = ":8080"
+
+[retry]
+
+[docker]
+endpoint = "unix:///var/run/docker.sock"
+watch = true
+exposedByDefault = false
+swarmMode = true
+
+[api]
+dashboard = true
+entryPoint = "traefik"
+
+logLevel = "WARN"
+
+[traefikLog]
+format = "json"
+
+[accessLog]
+format = "json"
+  [accessLog.fields]
+  defaultMode = "keep"
+    [accessLog.fields.names]
+      "BackendURL" = "drop"
+      "ClientUsername" = "drop"
+      "RequestPort" = "drop"
+    [accessLog.fields.headers]
+      defaultMode = "drop"
+      [accessLog.fields.headers.names]
+        "User-Agent" = "keep"
+        "Referer" = "keep"
+
+[metrics]
+  [metrics.prometheus]

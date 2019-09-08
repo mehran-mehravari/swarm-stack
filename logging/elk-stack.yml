@@ -1,0 +1,216 @@
+version: "3.7"
+ 
+services:
+
+  elastic-master:
+    image: local-registry-address/elasticsearch:7.3.1
+    environment:
+      discovery.seed_hosts: elastic-master
+      cluster.initial_master_nodes: elastic-master
+      node.name: elastic-master
+      node.master: "true"
+      node.data: "false"
+      node.ingest: "false"
+      cluster.remote.connect: "false"
+      cluster.name: mycluster
+      network.host: 0.0.0.0
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+      ELASTIC_PASSWORD: changeme
+    networks:
+      - elk
+    deploy:
+      endpoint_mode: dnsrr
+      mode: 'replicated'
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 10s
+      placement:
+        constraints: [node.labels.elk == master]
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+ 
+  elastic-data1:
+    image: registry.local/elasticsearch:7.3.1
+    environment:
+      discovery.seed_hosts: elastic-master
+      cluster.initial_master_nodes: elastic-master
+      node.name: elastic-data1
+      node.master: "false"
+      node.data: "true"
+      node.ingest: "false"
+      cluster.remote.connect: "false"
+      cluster.name: mycluster
+      network.host: 0.0.0.0
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+      ELASTIC_PASSWORD: changeme
+    networks:
+      - elk
+    volumes:
+      - esdata1:/usr/share/elasticsearch/data
+    deploy:
+      placement:
+       constraints: [node.hostname == staging-swarm-worker1]
+      mode: 'replicated'
+      replicas: 1
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+ 
+  elastic-data2:
+    image: registry.local/elasticsearch:7.3.1
+    environment:
+      discovery.seed_hosts: elastic-master
+      cluster.initial_master_nodes: elastic-master
+      node.name: elastic-data2
+      node.master: "false"
+      node.data: "true"
+      node.ingest: "false"
+      cluster.remote.connect: "false"
+      cluster.name: mycluster
+      network.host: 0.0.0.0
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+      ELASTIC_PASSWORD: changeme
+    networks:
+      - elk
+    volumes:
+      - esdata2:/usr/share/elasticsearch/data
+    deploy:
+      placement:
+        constraints: [node.hostname ==staging-swarm-worker2]
+      mode: 'replicated'
+      replicas: 1
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+  elastic-data3:
+    image: registry.local/elasticsearch:7.3.1
+    environment:
+      discovery.seed_hosts: elastic-master
+      cluster.initial_master_nodes: elastic-master
+      node.name: elastic-data3
+      node.master: "false"
+      node.data: "true"
+      node.ingest: "false"
+      cluster.remote.connect: "false"
+      cluster.name: mycluster
+      network.host: 0.0.0.0
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+      ELASTIC_PASSWORD: changeme
+    networks:
+      - elk
+    volumes:
+      - esdata3:/usr/share/elasticsearch/data
+    deploy:
+      placement:
+        constraints: [node.hostname ==staging-swarm-worker3]
+      mode: 'replicated'
+      replicas: 1
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G          
+ 
+  elastic-coordination:
+    image: registry.local/elasticsearch:7.3.1
+    environment:
+      discovery.seed_hosts: elastic-master
+      cluster.initial_master_nodes: elastic-master
+      node.name: elastic-coordination
+      node.master: "false"
+      node.data: "false"
+      node.ingest: "true"
+      cluster.remote.connect: "false"
+      cluster.name: mycluster
+      network.host: 0.0.0.0
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+      ELASTIC_PASSWORD: changeme
+    networks:
+      - elk
+    deploy:
+      endpoint_mode: dnsrr
+      mode: 'global'
+      update_config:
+        parallelism: 2
+        delay: 10s
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+ 
+  kibana:
+    image: registry.local/kibana:7.3.1
+    environment:
+      ELASTICSEARCH_HOSTS: http://elastic-coordination:9200
+    configs:
+      - source: kibana_config
+        target: /usr/share/kibana/config/kibana.yml
+    networks:
+      - elk
+      - gateway  
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        - "traefik.enable=true"
+        - "traefik.port=5601"
+        - "traefik.docker.network=gateway"
+        - "traefik.frontend.rule=Host:kibana.example.com"
+
+  logstash:
+    image: registry.local/logstash:7.3.1
+    ports:
+      - target: 5044
+        published: 5044
+        protocol: tcp
+        mode: host    
+    configs:
+      - source: logstash_config
+        target: /usr/share/logstash/config/logstash.yml
+      - source: logstash_pipeline
+        target: /usr/share/logstash/pipeline/logstash.conf
+    environment:
+      LS_JAVA_OPTS: "-Xmx1G -Xms1G"
+    networks:
+      - elk
+    deploy:
+      mode: global
+      update_config:
+        parallelism: 2
+        delay: 10s
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+configs:
+
+  logstash_config:
+    file: ./logstash/config/logstash.yml
+  logstash_pipeline:
+    file: ./logstash/pipeline/logstash.conf
+  kibana_config:
+    file: ./kibana/config/kibana.yml
+
+networks:
+  gateway:
+    driver: overlay
+    external: true      
+  elk:
+    driver: overlay
+ 
+volumes:
+  esdata1:
+  esdata2:
+  esdata3:

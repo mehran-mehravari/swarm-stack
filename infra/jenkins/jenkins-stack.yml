@@ -1,0 +1,35 @@
+version: "3.7"
+services:
+  jenkins:
+    image: local-registry-address/jenkins:latest
+    networks:
+      - gateway
+    volumes:
+      - jenkins:/var/jenkins_home
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.port=8080"
+        - "traefik.docker.network=gateway"
+        - "traefik.frontend.rule=Host:jenkins.example.com"
+      placement:
+        constraints:
+          - node.role == worker
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+volumes:
+  jenkins:
+    driver: rexray
+    driver_opts:
+      size: 50
+
+networks:
+  gateway:
+    driver: overlay
+    external: true

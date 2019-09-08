@@ -1,0 +1,171 @@
+version: '3.6'
+services:
+  prometheus:
+    image: registry.local/prom/prometheus:v2.3.1
+    volumes:
+      - prometheus_data:/prometheus
+    networks:
+      - monitoring
+      - gateway
+    configs:
+      - source: prometheus-1
+        target: /etc/prometheus/prometheus.yml
+      - source: node_rules-1
+        target: /etc/prometheus/node.rules.yml
+      - source: task_rules-1
+        target: /etc/prometheus/task.rules.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.path=/prometheus'
+      - '--log.level=info'
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+      labels:
+        - "traefik.enable=true"
+        - "traefik.port=9090"
+        - "traefik.docker.network=gateway"
+        - "traefik.frontend.rule=Host:prom.example.com"
+
+  node-exporter:
+    image: registry.local/prom/node-exporter
+    entrypoint: /etc/node-exporter/entrypoint.sh
+    user: root
+    environment:
+      - NODE_ID={{.Node.ID}}
+    configs:
+      - source: node-exporter-entrypoint
+        target: /etc/node-exporter/entrypoint.sh
+        mode: 0777
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+      - /etc/hostname:/etc/nodename:ro
+    command:
+      - '--path.sysfs=/host/sys'
+      - '--path.procfs=/host/proc'
+      - '--collector.textfile.directory=/etc/node-exporter/'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - monitoring
+    deploy:
+      mode: global
+      resources:
+        limits:
+          cpus: '1'
+          memory: 4G
+
+  alertmanager:
+    image: registry.local/prom/alertmanager
+    networks:
+      - monitoring
+    configs:
+      - source: alertmanager-1
+        target: /etc/alertmanager/config.yml
+    volumes:
+      - alertmanager:/alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/config.yml"
+      - '--storage.path=/alertmanager'
+      - '--log.level=info'
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 4G
+
+  cadvisor:
+    image: registry.local/google/cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - monitoring
+    deploy:
+      mode: global
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  grafana:
+    image: registry.local/grafana/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - DS_PROMETHEUS=prometheus
+    configs:
+      - source: prometheus_datasource
+        target: /etc/grafana/provisioning/datasources/prometheus.yml
+      - source: dashboards
+        target: /etc/grafana/provisioning/dashboards/dashboards.yml
+      - source: nodes_dashboard
+        target: /etc/grafana/dashboards/nodes.json
+      - source: services_dashboard
+        target: /etc/grafana/dashboards/services.json
+      - source: prometheus_dashboard
+        target: /etc/grafana/dashboards/prometheus.json
+      - source: traefik_dashboard
+        target: /etc/grafana/dashboards/traefik.json
+    networks:
+      - monitoring
+      - gateway
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: '1'
+          memory: 4G
+      labels:
+        - "traefik.enable=true"
+        - "traefik.port=3000"
+        - "traefik.docker.network=gateway"
+        - "traefik.frontend.rule=Host:grafana.example.com"
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  alertmanager:
+
+configs:
+  prometheus-1:
+    file: ./prometheus/prometheus.yml
+  alertmanager-1:
+    file: ./alertmanager/alertmanager.yml
+  node_rules-1:
+    file: ./prometheus/rules/node.rules.yml
+  task_rules-1:
+    file: ./prometheus/rules/task.rules.yml
+  prometheus_datasource:
+    file: ./grafana/datasources/prometheus.yml
+  dashboards:
+    file: ./grafana/dashboards.yml
+  nodes_dashboard:
+    file: ./grafana/dashboards/nodes.json
+  services_dashboard:
+    file: ./grafana/dashboards/services.json
+  prometheus_dashboard:
+    file: ./grafana/dashboards/prometheus.json
+  traefik_dashboard:
+    file: ./grafana/dashboards/traefik.json
+  node-exporter-entrypoint:
+    file: ./node-exporter/entrypoint.sh
+
+networks:
+  gateway:
+    driver: overlay
+    external: true
+  monitoring:
