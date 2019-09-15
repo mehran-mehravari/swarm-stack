@@ -194,6 +194,18 @@ services:
         reservations:
           memory: 2G
 
+  curator:
+    image: registry.local/curator:5.7.6
+    depends_on:
+      - elastic-coordination
+    environment:
+      - "PERIOD=15min"
+      - "KEEP_DAYS=1"
+      - "INDEX_PREFIX=docker-logs-"
+    command: "--host elastic-coordination --port 9200"      
+    networks:
+      - elk          
+
 configs:
 
   logstash_config:
